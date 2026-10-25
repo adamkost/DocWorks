@@ -30,6 +30,8 @@ Or, without building a jar: `mvn compile exec:java -Dexec.args="letter.doc"`.
   indents, bulleted and numbered lists, Heading 1-3.
 - **Tables:** Insert > Table. Tables are rows of tab-separated cells; they are saved as real tables in `.docx`.
 - **Printing** through the system print dialog.
+- **External changes:** if the open file is changed by another program, DocWorks asks whether to reload it
+  (discarding any edits made in DocWorks). The file is checked every 2 seconds while its window is active.
 
 ## Known limitations
 

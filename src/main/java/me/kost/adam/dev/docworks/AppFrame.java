@@ -90,10 +90,30 @@ public final class AppFrame extends JFrame {
     private static final String VERSION = "1.0.0";
     private static final String BULLET = "\u2022\t";
     private static final Pattern NUMBERED = Pattern.compile("^\\d+\\.\\t");
+    private static final int POLL_MS = 2000;
     private static final String[] SIZES = {"8", "9", "10", "11", "12", "14", "16", "18", "20", "24", "28", "36", "48", "72"};
 
     private static final List<AppFrame> WINDOWS = new ArrayList<>();
     private static Path lastDirectory;
+
+    /** Last-modified time and size of a file; two different stamps mean the file changed on disk. */
+    private static final class Stamp {
+        final long time;
+        final long size;
+        Stamp(long time, long size) { this.time = time; this.size = size; }
+        @Override public boolean equals(Object o) {
+            return o instanceof Stamp && ((Stamp) o).time == time && ((Stamp) o).size == size;
+        }
+        @Override public int hashCode() { return Long.hashCode(time) * 31 + Long.hashCode(size); }
+    }
+
+    private static Stamp stampOf(Path p) {
+        try {
+            return new Stamp(Files.getLastModifiedTime(p).toMillis(), Files.size(p));
+        } catch (IOException e) {
+            return null; // missing or unreadable right now
+        }
+    }
 
     /** Gives access to the protected formatting helpers of {@link StyledEditorKit.StyledTextAction}. */
     private static final class Fmt extends StyledEditorKit.StyledTextAction {
@@ -108,6 +128,7 @@ public final class AppFrame extends JFrame {
     private final UndoManager undo = new UndoManager();
     private final Fmt fmt = new Fmt();
     private final Timer countTimer;
+    private final Timer pollTimer;
     private final JLabel countsLabel = new JLabel(" ");
     private final JLabel positionLabel = new JLabel(" ");
     private JMenuItem undoItem;
@@ -124,6 +145,9 @@ public final class AppFrame extends JFrame {
     private boolean fromExisting;
     private boolean overwriteConfirmed;
     private boolean updating;
+    private Stamp knownStamp;       // what the file looked like when we last read or wrote it
+    private Stamp pendingStamp;     // a changed stamp seen once; it must repeat before we ask (file may still be being written)
+    private boolean reloadPrompting;
 
     // ------------------------------------------------------------------ window management
 
@@ -174,6 +198,7 @@ public final class AppFrame extends JFrame {
 
     private boolean close() {
         if (!confirmDiscard()) return false;
+        pollTimer.stop();
         WINDOWS.remove(this);
         if (findDialog != null) findDialog.dispose();
         dispose();
@@ -187,10 +212,13 @@ public final class AppFrame extends JFrame {
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             @Override public void windowClosing(WindowEvent e) { close(); }
+            @Override public void windowActivated(WindowEvent e) { pollFile(); }
         });
         undo.setLimit(1000);
         countTimer = new Timer(250, e -> updateCounts());
         countTimer.setRepeats(false);
+        pollTimer = new Timer(POLL_MS, e -> pollFile());
+        pollTimer.start();
 
         editor.setMargin(new Insets(24, 56, 24, 56));
         editor.addCaretListener(e -> { syncToolbar(); updatePosition(); });
@@ -382,6 +410,63 @@ public final class AppFrame extends JFrame {
         return p;
     }
 
+    // ------------------------------------------------------------------ external change detection
+
+    /**
+     * Called every couple of seconds and when the window is activated. If the open file was changed
+     * outside DocWorks, asks whether to reload it. Only the active window checks, so background windows
+     * never pop up dialogs, and a change must be seen on two consecutive checks so that a file another
+     * program is still writing is not read half-finished.
+     */
+    private void pollFile() {
+        if (file == null || reloadPrompting || !isActive()) return;
+        Stamp now = stampOf(file);
+        if (now == null || now.equals(knownStamp)) {
+            pendingStamp = null;
+            return;
+        }
+        if (!now.equals(pendingStamp)) {
+            pendingStamp = now;
+            return;
+        }
+        pendingStamp = null;
+        knownStamp = now; // answering "Keep My Version" must not ask again until the file changes again
+        askReload();
+    }
+
+    private void askReload() {
+        reloadPrompting = true;
+        try {
+            String name = file.getFileName().toString();
+            String message = name + " was changed by another program.\n\nReload it from disk?"
+                    + (modified ? "\nYour unsaved changes in " + APP + " will be discarded." : "");
+            String[] options = {"Reload", "Keep My Version"};
+            int choice = JOptionPane.showOptionDialog(this, message, APP + " - file changed",
+                    JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options,
+                    modified ? options[1] : options[0]);
+            if (choice == 0) reload();
+        } finally {
+            reloadPrompting = false;
+        }
+    }
+
+    /** Replaces the window's content with the file on disk, discarding any edits made here. */
+    private void reload() {
+        Stamp before = stampOf(file);
+        StyledDocument fresh;
+        try {
+            fresh = DocumentIO.load(file);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), APP + " - cannot reload", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        int caret = editor.getCaretPosition();
+        setDocument(fresh, file);
+        if (before != null) knownStamp = before;
+        fromExisting = true;
+        editor.setCaretPosition(Math.min(caret, fresh.getLength()));
+    }
+
     // ------------------------------------------------------------------ context menu
 
     /** Right-click menu with Cut, Copy and Paste. Cut and Copy are enabled only while text is highlighted. */
@@ -436,6 +521,8 @@ public final class AppFrame extends JFrame {
         editor.setDocument(newDoc);
         editor.setCaretPosition(0);
         file = path;
+        knownStamp = path == null ? null : stampOf(path);
+        pendingStamp = null;
         fromExisting = false;
         overwriteConfirmed = false;
         setModified(false);
@@ -586,6 +673,8 @@ public final class AppFrame extends JFrame {
         }
         file = target.toAbsolutePath().normalize();
         lastDirectory = file.getParent();
+        knownStamp = stampOf(file); // our own save must not look like an outside change
+        pendingStamp = null;
         setModified(false);
         return true;
     }
