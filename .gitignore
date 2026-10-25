@@ -1,0 +1,5 @@
+target/
+*.docworks-tmp
+.idea/
+*.iml
+.vscode/
