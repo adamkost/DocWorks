@@ -24,6 +24,8 @@ Or, without building a jar: `mvn compile exec:java -Dexec.args="letter.doc"`.
 
 - **Open:** `.doc` (Word 97-2003, via Apache POI HWPF), `.docx` (XWPF), `.rtf`, `.txt`. The format is
   detected from the file content, so a misnamed file still opens.
+- **Recent files:** File > Open Recent lists the last 10 files opened or saved. The list is kept between runs
+  and shared by all windows; files that no longer exist are removed when you click them.
 - **Save:** `.docx`, `.rtf`, `.txt`. Saves go to a temporary file first, so a failed save never damages the original.
 - **Editing:** undo/redo, cut/copy/paste (also on the right-click menu), select all, find and replace (with match case), word and character counts.
 - **Formatting:** font, size, bold, italic, underline, strikethrough, colour, left/center/right/justify,

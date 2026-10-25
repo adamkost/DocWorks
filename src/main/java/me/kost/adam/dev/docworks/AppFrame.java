@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
+import java.util.prefs.Preferences;
 import java.util.regex.Pattern;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
@@ -95,6 +96,7 @@ public final class AppFrame extends JFrame {
 
     private static final List<AppFrame> WINDOWS = new ArrayList<>();
     private static Path lastDirectory;
+    private static final RecentFiles RECENT = new RecentFiles(Preferences.userNodeForPackage(AppFrame.class));
 
     /** Last-modified time and size of a file; two different stamps mean the file changed on disk. */
     private static final class Stamp {
@@ -131,6 +133,7 @@ public final class AppFrame extends JFrame {
     private final Timer pollTimer;
     private final JLabel countsLabel = new JLabel(" ");
     private final JLabel positionLabel = new JLabel(" ");
+    private final JMenu recentMenu = new JMenu("Open Recent");
     private JMenuItem undoItem;
     private JMenuItem redoItem;
     private JComboBox<String> fontCombo;
@@ -158,6 +161,7 @@ public final class AppFrame extends JFrame {
             if (abs.equals(w.file)) {
                 w.toFront();
                 w.requestFocus();
+                recordRecent(abs);
                 return true;
             }
         }
@@ -180,6 +184,7 @@ public final class AppFrame extends JFrame {
         target.setDocument(loaded, abs);
         target.fromExisting = true;
         lastDirectory = abs.getParent();
+        recordRecent(abs);
         target.toFront();
         return true;
     }
@@ -225,6 +230,7 @@ public final class AppFrame extends JFrame {
         installContextMenu();
 
         setJMenuBar(buildMenuBar());
+        rebuildRecentMenu();
         add(buildToolBar(), BorderLayout.NORTH);
         JScrollPane scroll = new JScrollPane(editor);
         scroll.getVerticalScrollBar().setUnitIncrement(24);
@@ -246,6 +252,7 @@ public final class AppFrame extends JFrame {
         JMenu f = new JMenu("File");
         f.add(item("New", KeyEvent.VK_N, false, AppFrame::openNew));
         f.add(item("Open...", KeyEvent.VK_O, false, this::openDialog));
+        f.add(recentMenu);
         f.addSeparator();
         f.add(item("Save", KeyEvent.VK_S, false, this::save));
         f.add(item("Save As...", KeyEvent.VK_S, true, this::saveAs));
@@ -408,6 +415,51 @@ public final class AppFrame extends JFrame {
         p.add(countsLabel, BorderLayout.WEST);
         p.add(positionLabel, BorderLayout.EAST);
         return p;
+    }
+
+    // ------------------------------------------------------------------ recent files
+
+    /** Puts a file at the top of the shared recent list and refreshes the Open Recent menu of every window. */
+    private static void recordRecent(Path p) {
+        RECENT.add(p);
+        refreshRecentMenus();
+    }
+
+    private static void refreshRecentMenus() {
+        for (AppFrame w : WINDOWS) w.rebuildRecentMenu();
+    }
+
+    private void rebuildRecentMenu() {
+        recentMenu.removeAll();
+        List<Path> list = RECENT.list();
+        if (list.isEmpty()) {
+            JMenuItem none = new JMenuItem("(No recent files)");
+            none.setEnabled(false);
+            recentMenu.add(none);
+            return;
+        }
+        for (int i = 0; i < list.size(); i++) {
+            Path p = list.get(i);
+            JMenuItem m = item((i + 1) + "  " + p.getFileName(), 0, false, () -> openRecent(p));
+            m.setToolTipText(p.toString());
+            recentMenu.add(m);
+        }
+        recentMenu.addSeparator();
+        recentMenu.add(item("Clear Recent Files", 0, false, () -> {
+            RECENT.clear();
+            refreshRecentMenus();
+        }));
+    }
+
+    private void openRecent(Path p) {
+        if (!Files.isRegularFile(p)) {
+            JOptionPane.showMessageDialog(this, p + "\nno longer exists and will be removed from the recent list.",
+                    APP, JOptionPane.WARNING_MESSAGE);
+            RECENT.remove(p);
+            refreshRecentMenus();
+            return;
+        }
+        openPath(p);
     }
 
     // ------------------------------------------------------------------ external change detection
@@ -675,6 +727,7 @@ public final class AppFrame extends JFrame {
         lastDirectory = file.getParent();
         knownStamp = stampOf(file); // our own save must not look like an outside change
         pendingStamp = null;
+        recordRecent(file);
         setModified(false);
         return true;
     }
