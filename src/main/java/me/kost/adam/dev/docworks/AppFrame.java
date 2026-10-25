@@ -25,9 +25,12 @@ import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
 import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.print.PrinterException;
@@ -55,6 +58,7 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTextPane;
@@ -190,6 +194,7 @@ public final class AppFrame extends JFrame {
 
         editor.setMargin(new Insets(24, 56, 24, 56));
         editor.addCaretListener(e -> { syncToolbar(); updatePosition(); });
+        installContextMenu();
 
         setJMenuBar(buildMenuBar());
         add(buildToolBar(), BorderLayout.NORTH);
@@ -375,6 +380,46 @@ public final class AppFrame extends JFrame {
         p.add(countsLabel, BorderLayout.WEST);
         p.add(positionLabel, BorderLayout.EAST);
         return p;
+    }
+
+    // ------------------------------------------------------------------ context menu
+
+    /** Right-click menu with Cut, Copy and Paste. Cut and Copy are enabled only while text is highlighted. */
+    private void installContextMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem cut = item("Cut", 0, false, editor::cut);
+        JMenuItem copy = item("Copy", 0, false, editor::copy);
+        JMenuItem paste = item("Paste", 0, false, editor::paste);
+        menu.add(cut);
+        menu.add(copy);
+        menu.add(paste);
+        editor.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { maybeShow(e); }   // Linux, macOS
+            @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }  // Windows
+
+            private void maybeShow(MouseEvent e) {
+                if (!e.isPopupTrigger()) return;
+                editor.requestFocusInWindow();
+                int pos = editor.viewToModel2D(e.getPoint());
+                // Right-clicking inside the highlighted text keeps it; elsewhere the caret moves there first
+                if (pos >= 0 && (pos < editor.getSelectionStart() || pos > editor.getSelectionEnd())) {
+                    editor.setCaretPosition(pos);
+                }
+                boolean hasSelection = editor.getSelectionStart() != editor.getSelectionEnd();
+                cut.setEnabled(hasSelection);
+                copy.setEnabled(hasSelection);
+                paste.setEnabled(clipboardHasText());
+                menu.show(editor, e.getX(), e.getY());
+            }
+        });
+    }
+
+    private static boolean clipboardHasText() {
+        try {
+            return Toolkit.getDefaultToolkit().getSystemClipboard().isDataFlavorAvailable(DataFlavor.stringFlavor);
+        } catch (IllegalStateException | java.awt.HeadlessException ex) {
+            return true; // clipboard busy or unavailable: let the paste attempt decide
+        }
     }
 
     // ------------------------------------------------------------------ document handling

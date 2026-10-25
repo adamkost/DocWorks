@@ -14,7 +14,9 @@ mvn package
 java -jar target/docworks.jar [file.doc ...]
 ```
 
-or, without building a jar: `mvn compile exec:java -Dexec.args="letter.doc"`.
+On Windows, after building, double-click `docworks.bat` (or run `docworks.bat letter.doc`).
+
+Or, without building a jar: `mvn compile exec:java -Dexec.args="letter.doc"`.
 
 `mvn test` runs the headless I/O tests (no display needed).
 
@@ -23,7 +25,7 @@ or, without building a jar: `mvn compile exec:java -Dexec.args="letter.doc"`.
 - **Open:** `.doc` (Word 97-2003, via Apache POI HWPF), `.docx` (XWPF), `.rtf`, `.txt`. The format is
   detected from the file content, so a misnamed file still opens.
 - **Save:** `.docx`, `.rtf`, `.txt`. Saves go to a temporary file first, so a failed save never damages the original.
-- **Editing:** undo/redo, cut/copy/paste, select all, find and replace (with match case), word and character counts.
+- **Editing:** undo/redo, cut/copy/paste (also on the right-click menu), select all, find and replace (with match case), word and character counts.
 - **Formatting:** font, size, bold, italic, underline, strikethrough, colour, left/center/right/justify,
   indents, bulleted and numbered lists, Heading 1-3.
 - **Tables:** Insert > Table. Tables are rows of tab-separated cells; they are saved as real tables in `.docx`.
