@@ -27,7 +27,7 @@ Or, without building a jar: `mvn compile exec:java -Dexec.args="letter.doc"`.
 - **Recent files:** File > Open Recent lists the last 10 files opened or saved. The list is kept between runs
   and shared by all windows; files that no longer exist are removed when you click them.
 - **Save:** `.docx`, `.rtf`, `.txt`. Saves go to a temporary file first, so a failed save never damages the original.
-- **Editing:** undo/redo, cut/copy/paste (also on the right-click menu), select all, find and replace (with match case), word and character counts.
+- **Editing:** undo/redo, cut/copy/paste (also on the right-click menu), Paste as Plain Text (Ctrl+Shift+V), select all, find and replace (with match case), word and character counts.
 - **Formatting:** font, size, bold, italic, underline, strikethrough, colour, left/center/right/justify,
   indents, bulleted and numbered lists, Heading 1-3.
 - **Tables:** Insert > Table. Tables are rows of tab-separated cells; they are saved as real tables in `.docx`.

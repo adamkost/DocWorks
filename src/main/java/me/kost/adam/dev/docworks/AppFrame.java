@@ -26,6 +26,8 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -272,6 +274,7 @@ public final class AppFrame extends JFrame {
         e.add(item("Cut", KeyEvent.VK_X, false, editor::cut));
         e.add(item("Copy", KeyEvent.VK_C, false, editor::copy));
         e.add(item("Paste", KeyEvent.VK_V, false, editor::paste));
+        e.add(item("Paste as Plain Text", KeyEvent.VK_V, true, this::pastePlainText));
         e.add(item("Select All", KeyEvent.VK_A, false, editor::selectAll));
         e.addSeparator();
         e.add(item("Find and Replace...", KeyEvent.VK_F, false, () -> findDialog.open()));
@@ -527,9 +530,11 @@ public final class AppFrame extends JFrame {
         JMenuItem cut = item("Cut", 0, false, editor::cut);
         JMenuItem copy = item("Copy", 0, false, editor::copy);
         JMenuItem paste = item("Paste", 0, false, editor::paste);
+        JMenuItem pastePlain = item("Paste as Plain Text", 0, false, this::pastePlainText);
         menu.add(cut);
         menu.add(copy);
         menu.add(paste);
+        menu.add(pastePlain);
         editor.addMouseListener(new MouseAdapter() {
             @Override public void mousePressed(MouseEvent e) { maybeShow(e); }   // Linux, macOS
             @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }  // Windows
@@ -546,9 +551,32 @@ public final class AppFrame extends JFrame {
                 cut.setEnabled(hasSelection);
                 copy.setEnabled(hasSelection);
                 paste.setEnabled(clipboardHasText());
+                pastePlain.setEnabled(clipboardHasText());
                 menu.show(editor, e.getX(), e.getY());
             }
         });
+    }
+
+    /**
+     * Inserts the clipboard's text only, ignoring any formatting it carries (HTML, RTF and so on).
+     * The text takes on the formatting at the caret, like typed text, and replaces any highlighted text.
+     */
+    private void pastePlainText() {
+        String text;
+        try {
+            Transferable t = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
+            if (t == null || !t.isDataFlavorSupported(DataFlavor.stringFlavor)) {
+                Toolkit.getDefaultToolkit().beep();
+                return;
+            }
+            text = (String) t.getTransferData(DataFlavor.stringFlavor);
+        } catch (UnsupportedFlavorException | IOException | IllegalStateException ex) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+        text = PlainText.clean(text);
+        if (!text.isEmpty()) editor.replaceSelection(text);
+        editor.requestFocusInWindow();
     }
 
     private static boolean clipboardHasText() {
